@@ -3,6 +3,9 @@ package com.log4j2.plugin;
 import com.aliyun.openservices.log.Client;
 import com.aliyun.openservices.log.common.LogItem;
 import com.aliyun.openservices.log.exception.LogException;
+import com.aliyun.openservices.log.producer.LogProducer;
+import com.aliyun.openservices.log.producer.ProducerConfig;
+import com.aliyun.openservices.log.producer.ProjectConfig;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.LogEvent;
@@ -38,6 +41,11 @@ public class LogHubAppender extends AbstractAppender {
     private String logstore = "<logstore_name>"; // 上面步骤创建的日志库名称
 
     private Client client;
+
+    private ProducerConfig producerConfig = new ProducerConfig();
+    private LogProducer producer;
+    private ProjectConfig projectConfig = new ProjectConfig();
+
     private LogHubAppender(String name, Filter filter, Layout<? extends Serializable> layout, boolean ignoreExceptions,
                            String source, String topic, String project, String logstore, DateFormat dateFormat, String endpoint, String accessKeyId, String accessKeySecret) {
         super(name, filter, layout, ignoreExceptions);
@@ -49,6 +57,11 @@ public class LogHubAppender extends AbstractAppender {
         this.logstore = logstore;
         this.dateFormat = dateFormat;
         this.source=source;
+
+        projectConfig.accessKeyId=accessKeyId;
+        projectConfig.accessKey=accessKeySecret;
+        projectConfig.endpoint=endpoint;
+        projectConfig.projectName=project;
     }
 
     @Override
@@ -90,22 +103,27 @@ public class LogHubAppender extends AbstractAppender {
             }
         }
 
-        try {
-            client.PutLogs(project,logstore,topic,logItems,"");
-        } catch (LogException e) {
-            LOGGER.error(e.GetErrorMessage());
-        }
+        producer.send(project,logstore,topic,source,logItems,new CallbackSample(producer));
+//        try {
+//            client.PutLogs(project,logstore,topic,logItems,"");
+//        } catch (LogException e) {
+//            LOGGER.error(e.GetErrorMessage());
+//        }
 
     }
 
     @Override
     public void start() {
         client=new Client(endpoint,accessKeyId,accessKeySecret);
+        producer=new LogProducer(producerConfig);
+        producer.setProjectConfig(projectConfig);
         super.start();
     }
 
     @Override
     public void stop() {
+        producer.flush();
+        producer.close();
         super.stop();
     }
 
